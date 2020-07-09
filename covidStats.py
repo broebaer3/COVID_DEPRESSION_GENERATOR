@@ -14,7 +14,7 @@ weekCutoff = 23; #cut off at week 15 b/c out of data basically
 
 FLG_compareToHistorical = 1; #0 compares uncounted to current year estimation based on an average from 1/7/2020 to 3/1/2020
     #1 compares uncounted to the historical average [good for very populated states/entire USA]
-FLG_yearsForHistorical = [2019,2019]; #range of years to average together. Possible range is 2014 to 2019 due to 2014 is as far back as CDC data is and 2019 is right before now
+FLG_yearsForHistorical = [2017,2019]; #range of years to average together. Possible range is 2014 to 2019 due to 2014 is as far back as CDC data is and 2019 is right before now
     #[2019,2019] would only show 2019 with no averaging, [2018,2018] would only show 2018 with no averaging, etc.
 #-----End User Inputs-----
 
@@ -58,6 +58,7 @@ if( os.path.isfile(data_currentNameAlt) == False  ): #this can be gotten easily,
 data_historical = pandas.read_csv(data_historicalName);
 states_historical = data_historical['Jurisdiction of Occurrence'].to_numpy();
 statesUnique_historical = np.unique(states_historical);
+statesUnique_historical = np.delete(statesUnique_historical, np.where(statesUnique_historical == 'United States')[0]); #remove United States
 years_historical = data_historical['MMWR Year'].to_numpy();
 weeks_historical = data_historical['MMWR Week'].to_numpy();
 deaths_historical = data_historical['All  Cause'].to_numpy(); #NOTE THE DOUBLE SPACE!!
@@ -108,7 +109,7 @@ states_current = data_current['Jurisdiction of Occurrence'].to_numpy();
 years_current = data_current['MMWR Year'].to_numpy();
 weeks_current = data_current['MMWR Week'].to_numpy();
 deaths_current = data_current['All Cause'].to_numpy(); #no double space here
-deaths_current_influenzaPneumonia = data_current['Influenza and pneumonia (J10-J18)'].to_numpy();
+deaths_current_influenzaPneumonia = data_current['Influenza and pneumonia (J09-J18)'].to_numpy();
 #All Cause comes in with commas so it's treated as an object not a number
 if( deaths_current.dtype == 'O' ):
     deaths_current_object = np.copy(deaths_current); #copy it over
@@ -279,9 +280,14 @@ if( np.sum(k) > 0 ):
     deaths_historical_influenzaPneumonia = np.delete(deaths_historical_influenzaPneumonia,np.where(k==True)[0]); #delete the historical years not needed
 #END IF
 
+#NaN protection
+deaths_historical_influenzaPneumonia[np.isnan(deaths_historical_influenzaPneumonia)] = 0; #remove NaNs from this, as there are now NaNs in it
+deaths_current_influenzaPneumonia[np.isnan(deaths_current_influenzaPneumonia)] = 0; #remove NaNs from this, as there are now NaNs in it
+
 #==================================Combine into one country if option is on==================================
 if( FLG_combineUSA == 1 ):
     statesUnique_historical = np.unique(states_historical); #get a new one since NYC is gone
+    statesUnique_historical = np.delete(statesUnique_historical, np.where(statesUnique_historical == 'United States')[0]); #remove United States
     for i in range(0,statesUnique_historical.size):
         k = states_historical == statesUnique_historical[i];
         if( i == 0 ):
@@ -585,7 +591,11 @@ for i in range(0,len(statesInterest)): #run through the state of interest
     covidCountedNum = np.int64(np.nansum(deaths_covidValuesOnWeekly[kk,i]));
     deaths_covidCountedTotal = deaths_covidCountedTotal + covidCountedNum; #record the total counted for all states involved
     k = np.where(np.nan_to_num(deaths_covidValuesOnWeekly[kk,i]) > 0)[0]; #get where COVID-19 deaths are occuring
-    excessNum = np.int64(np.round(np.sum(deaths_currentValues[k,i] - np.tile(currAvg,k.size)))); #calculate excess deaths over the mean
+    if( FLG_compareToHistorical == 0 ):
+        excessNum = np.int64(np.round(np.sum(deaths_currentValues[k,i] - np.tile(currAvg,k.size)))); #calculate excess deaths over the mean
+    else:
+        excessNum = np.int64(np.round(np.sum(deaths_currentValues[k,i] - deaths_historicalAvg[k,i]))); #calculate excess deaths over the mean
+    #END IF
     deaths_excessTotal = deaths_excessTotal + excessNum; #reord the total excess deaths for all states involved
     
     #plot influenza/pneumonia deaths
@@ -623,7 +633,7 @@ for i in range(0,len(statesInterest)): #run through the state of interest
     if( currAvgComp.sum() == 0 ):
         ax.legend((lhist,lcurr,lcurrAvg,lcovid,scovid,lfluPneuHist,lfluPneu,lfluPneuAlt),( \
             'Historical Average ['+str(years_historical.min())+' to '+str(years_historical.max())+']', \
-            str(yearOfInterest)+' Deaths ['+str(excessNum)+' Above Average since 1st COVID-19 Death]', \
+            str(yearOfInterest)+' Deaths ['+str(excessNum)+' Total]', \
             str(yearOfInterest)+' Average Deaths ['+xLabels[0].get_text()+' to 03/01/20]', \
             'Counted COVID-19 Deaths ['+str(covidCountedNum)+' Total]','Due to Counted COVID-19', \
             'Historical Avg. Influenza/Pneumonia ['+str(years_historical.min())+' to '+str(years_historical.max())+ \
@@ -633,7 +643,7 @@ for i in range(0,len(statesInterest)): #run through the state of interest
     else:
         ax.legend((lhist,lcurr,lcurrAvg,lcovid,scovid,scovidProbable,lfluPneuHist,lfluPneu,lfluPneuAlt),( \
             'Historical Average ['+str(years_historical.min())+' to '+str(years_historical.max())+']', \
-            str(yearOfInterest)+' Deaths ['+str(excessNum)+' Total]', \
+            str(yearOfInterest)+' Deaths ['+str(excessNum)+' Above Average since 1st COVID-19 Death]', \
             str(yearOfInterest)+' Average Deaths ['+xLabels[0].get_text()+' to 03/01/20]',\
             'Counted COVID-19 Deaths ['+str(covidCountedNum)+' Total]','Due to Counted COVID-19','Uncounted probable COVID-19 Deaths ['+str(covidProbableNum)+' Total]', \
             'Historical Avg. Influenza/Pneumonia ['+str(years_historical.min())+' to '+str(years_historical.max())+ \
